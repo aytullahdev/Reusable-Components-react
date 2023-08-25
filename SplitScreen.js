@@ -19,3 +19,8 @@ export const SplitScreen = ({ children, leftWeight = 1, rightWeight = 1
         </Container>
     )
 }
+
+<SplitScreen leftWeight={1} rightWeight={1} >
+      <LeftHandComponent title="This is left side" />
+      <RightHandComponent title="This is right side" />
+</SplitScreen>
