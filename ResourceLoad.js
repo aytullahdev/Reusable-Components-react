@@ -5,7 +5,7 @@ export const ResourceLoad = ({ resourceUrl, resourceName, children }) => {
     const [data, setData] = useState(null)
     useEffect(() => {
         (async () => {
-            const response = await axios.get(`${resourceUrl}`)
+            const response = await axios.get(`${resourceUrl}`) // we can use function that come from parent
             console.log(response)
             setData(response.data)
         })();
