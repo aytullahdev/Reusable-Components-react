@@ -2,6 +2,8 @@ import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 const [sectionPosition, setSectionPositions] = useState(Object.keys(templateData).map((id) => ({ "id": id + "drage", "sectionName": id })))
 
    const handleOnDragEnd = (result) => {
+        // https://www.youtube.com/watch?v=aYZRRyukuIw
+        if (!result.destination) return;
         if ((!result.destination.index || !result.source.index) && (result.destination.index !== 0 && result.source.index !== 0)) return;
         const items = Array.from(sectionPosition);
         const [reorderedItem] = items.splice(result.source.index, 1);
