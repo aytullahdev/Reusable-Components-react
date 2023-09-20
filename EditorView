@@ -1,0 +1,655 @@
+"use client"
+import React, { useEffect, useState } from 'react';
+import TemplateOne from './templates/TemplateOne';
+import TemplateTwo from './templates/TemplateTwo';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
+
+const GetInputField = ({ dataObject, handleChange, extraStyle, indx = 1, key }) => {
+
+    return <div className={`flex flex-col text-xs  space-y-2 ${extraStyle}`} key={key}>
+        <label>
+            {dataObject.title}
+        </label>
+        {dataObject && dataObject.type !== "textarea" ? <>
+
+            <input className='border  shadow-sm outline-none rounded-md p-2 ' type={dataObject.type} onChange={(e) => handleChange(e, indx)} name={dataObject.key} value={dataObject.value} placeholder={`${dataObject.title}`} />
+        </> : <><textarea className='border w-full  p-5 rounded-lg outline-none' value={dataObject.value} name={dataObject.key} onChange={(e) => handleChange(e, indx)} placeholder={`${dataObject.title}`} /></>}
+    </div>
+}
+const EditLabelData = ({ title, labelData, handleChange, fieldIndx, fieldName }) => {
+    return <>
+        {labelData && <div className='w-full flex text-xs flex-col '>
+            <h1 className=' font-normal capitalize'>{title}</h1>
+            <div className=' items-center my-2 grid grid-cols-2 gap-4' >
+                {Object.keys(labelData).map((label, indx) => {
+                    return <div key={indx} className='flex flex-row space-x-5 justify-center items-center'>
+
+                        <label className='capitalize'>{label}</label>
+                        <input className='border px-4 outline-none rounded-md py-2 flex-grow' name={label} value={labelData[label]} onChange={(e) => handleChange(e, fieldIndx, fieldName, label)} />
+
+                    </div>
+                })}
+
+
+            </div>
+
+        </div>
+        }
+
+    </>
+}
+const EditDetailPoints = ({ sectionName, title, detailsPoints, handleDetailsChange, fieldIndx, fieldName, addDetailsPoint, removeDetailsPoint }) => {
+    if (sectionName === "skills") {
+        return <>
+            <div className='w-full flex text-xs flex-col space-y-5'>
+                <h1 className=' font-normal'>{title}</h1>
+                <div className='flex flex-row flex-wrap justify-center items-center gap-3'>
+                    {detailsPoints.map((singlePoint, indx) => {
+                        return <div className='flex flex-row space-x-1 justify-center items-center' key={indx}>
+                            <input name={fieldName} placeholder='Write your skill...' onChange={(e) => handleDetailsChange(e, fieldIndx, indx)} value={singlePoint} className='border px-5 py-2  rounded outline-none' key={indx} />
+                            <div>
+                                <button onClick={() => { removeDetailsPoint(fieldName, fieldIndx, indx) }} className='  rounded-full bg-red-500 text-white  block mx-auto'><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 font-bold">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                </button>
+                            </div>
+                        </div>
+                    })}
+                </div>
+                <button onClick={(e) => { addDetailsPoint(fieldName, fieldIndx) }} className='px-5 my-2 py-1 rounded-lg  text-green-500 block mx-auto'><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                </button>
+
+            </div>
+
+
+        </>
+
+    }
+    return <>
+        <div className='w-full flex text-xs flex-col space-y-5'>
+            <h1 className=' font-normal'>{title}</h1>
+            {detailsPoints.map((singlePoint, indx) => {
+                return <div className='flex flex-row justify-center items-start gap-2' key={indx}>
+                    <textarea name={fieldName} placeholder='Write about your details...' onChange={(e) => handleDetailsChange(e, fieldIndx, indx)} value={singlePoint} className='border px-5 py-4 w-full rounded outline-none' key={indx} />
+                    <div>
+                        <button onClick={() => { removeDetailsPoint(fieldName, fieldIndx, indx) }} className='   rounded-full bg-red-500 text-white  block mx-auto'><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 font-bold">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        </button>
+                    </div>
+                </div>
+            })}
+            <button onClick={(e) => { addDetailsPoint(fieldName, fieldIndx) }} className='px-5 my-2 py-1 rounded-lg  text-green-500 block mx-auto'><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            </button>
+
+        </div>
+
+
+    </>
+}
+const EditSection = ({ templateData, sectionName, setTemplateData, key }) => {
+    const { data, title, icon, type } = templateData[sectionName] || {}
+
+    const handleChange = (e) => {
+        if (type === 'field') {
+            let oldData = { ...templateData[sectionName]['data'] }
+            const updatedSection = { ...oldData }
+            updatedSection[e.target.name].value = e.target.value
+            oldData = templateData
+            oldData[sectionName].data = updatedSection;
+            setTemplateData({ ...oldData })
+        }
+
+
+    }
+    const handleArrayData = (e, indx) => {
+        if (type === 'array') {
+            let oldData = [...templateData[sectionName]['data']]
+
+            oldData[indx][e.target.name].value = e.target.value;
+            let updatedSection = { ...templateData[sectionName] }
+            updatedSection = { ...updatedSection, data: oldData }
+            setTemplateData((prev) => ({ ...prev, [sectionName]: updatedSection }))
+        }
+    }
+    const handleDetailsChange = (e, fieldIndx, pointIndx) => {
+        let oldData = [...templateData[sectionName]['data']]
+        oldData[fieldIndx][e.target.name].value[pointIndx] = e.target.value;
+        let updatedSection = { ...templateData[sectionName] }
+        updatedSection = { ...updatedSection, data: oldData }
+        setTemplateData((prev) => ({ ...prev, [sectionName]: updatedSection }))
+
+    }
+    const addDetailsPoint = (fieldName, fieldIndx) => {
+        let oldData = [...templateData[sectionName]['data']]
+        oldData[fieldIndx][fieldName].value.push("");
+        let updatedSection = { ...templateData[sectionName] }
+        updatedSection = { ...updatedSection, data: oldData }
+        setTemplateData((prev) => ({ ...prev, [sectionName]: updatedSection }))
+
+    }
+    const removeDetailsPoint = (fieldName, fieldIndx, pointIndx) => {
+        let oldData = [...templateData[sectionName]['data']]
+        oldData[fieldIndx][fieldName].value = oldData[fieldIndx][fieldName].value.filter((element, index) => index !== pointIndx);;
+        let updatedSection = { ...templateData[sectionName] }
+        updatedSection = { ...updatedSection, data: oldData }
+        setTemplateData((prev) => ({ ...prev, [sectionName]: updatedSection }))
+    }
+    const handleLabelChange = (e, fieldIndx, fieldName, label) => {
+        let oldData = [...templateData[sectionName]['data']]
+        oldData[fieldIndx][fieldName]['value'][e.target.name] = e.target.value
+        let updatedSection = { ...templateData[sectionName] }
+        updatedSection = { ...updatedSection, data: oldData }
+        setTemplateData((prev) => ({ ...prev, [sectionName]: updatedSection }))
+
+    }
+    return <>{sectionName && title && data &&
+        <details key={key} className='rounded-lg bg-white py-2 shadow-sm hover:shadow-sm border  cursor-pointer my-2'>
+            <summary className='text-xl font-semibold py-2 px-2 space-x-5 flex flex-row items-center justify-between'>
+                <span>
+                    {icon()}
+                </span>
+                <span className='flex-grow text-center'>{title}</span>
+                {/* <span>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                    </svg>
+
+                </span> */}
+                <span>
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+                    </svg>
+
+                </span>
+            </summary>
+
+            <div className='flex flex-col mt-5 space-y-5'>
+                {/* Name */}
+                <div className=' grid grid-cols-1 lg:grid-cols-2 lg:gap-4 justify-between items-center px-2 '>
+                    {data && type === 'field' && Object.keys(data).map((Objkey, indx) => <GetInputField key={indx} dataObject={data[Objkey]} extraStyle={data[Objkey].type === 'textarea' ? "col-span-2" : ""} handleChange={handleChange} />)}
+                    {data && type === 'array' &&
+
+                        data.map((singleElem, indx) => {
+                            return (<div className='col-span-2 grid grid-cols-2 gap-4  ' key={indx}>
+                                <h1 className='col-span-2 text-center font-bold  '><span className='w-5 h-5 flex justify-center items-center  p-1  text-green-500 rounded-full border'>{indx + 1}</span></h1>
+                                {
+                                    Object.keys(singleElem).map((Objkey) => {
+                                        if (singleElem[Objkey].type === "label") {
+
+                                            return <div key={Objkey} className='col-span-2 py-1 flex flex-col space-y-5'> <EditLabelData title={singleElem[Objkey].title} fieldName={Objkey} fieldIndx={indx} handleChange={handleLabelChange} labelData={singleElem[Objkey].value} />
+                                            </div>
+                                        }
+
+                                        if (singleElem[Objkey].type === "details_point") {
+                                            return <div key={sectionName} className='col-span-2 py-1 flex flex-col space-y-5'>
+
+                                                <EditDetailPoints title={singleElem[Objkey].title} removeDetailsPoint={removeDetailsPoint} addDetailsPoint={addDetailsPoint} fieldName={Objkey} fieldIndx={indx} handleDetailsChange={handleDetailsChange} detailsPoints={singleElem[Objkey].value} sectionName={sectionName} />
+                                            </div>
+                                        }
+                                        return <GetInputField key={sectionName} dataObject={singleElem[Objkey]} extraStyle={singleElem[Objkey].type === 'textarea' ? "col-span-2" : ""} indx={indx} handleChange={handleArrayData} />
+                                    })}
+
+                            </div>)
+
+                        })}
+
+
+
+
+                </div>
+
+            </div>
+        </details >
+    }
+
+    </>
+}
+const Editorview = () => {
+    const [templateData, setTemplateData] = useState({
+        "personalDetails": {
+            type: 'field',
+            title: "Personal Details",
+            key: "personalDetails",
+            icon: () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.294 6.336a6.721 6.721 0 01-3.17.789 6.721 6.721 0 01-3.168-.789 3.376 3.376 0 016.338 0z" />
+            </svg>
+            ,
+            data: {
+                firstName: {
+                    type: "text",
+                    value: "AYAT",
+                    key: "firstName",
+                    title: "First Name"
+                },
+                lastName: {
+                    type: "text",
+                    value: "ULLAH",
+                    key: "lastName",
+                    title: "Last Name"
+                },
+                address: {
+                    type: "textarea",
+                    value: "Kumirea, Shitakunda, Chittagong, 4313",
+                    key: "address",
+                    title: "Address"
+                },
+                email: {
+                    type: "email",
+                    value: "ayt.ullah.dev@gmail.com",
+                    key: "email",
+                    title: "Email"
+                },
+                github: {
+                    type: "text",
+                    value: "aytullahdev",
+                    key: "github",
+                    title: "Github"
+                },
+                linkedin: {
+                    type: "text",
+                    value: "ayat-ullah",
+                    key: "linkedin",
+                    title: "Linkedin"
+                },
+                phone: {
+                    type: "text",
+                    value: "01926668875",
+                    key: "phone",
+                    title: "Phone"
+                },
+                professional_summary: {
+                    type: 'textarea',
+                    value: `A hardworking individual who strives to learn a bit more each day,
+                     more so in the field of Finance and Strategic Management. Proficient user of G-suite. Passionate
+                    about presenting, anchoring, and public speaking. Strong skills in planning &
+                    coordination, slide development & documentation, financial analysis & modeling,
+                    capital budgeting methods, equity report & valuation, and data mining.",
+                    key: "professional_summary",
+                    title: "Professional Summary`
+                }
+            },
+
+        },
+        "experience": {
+            type: 'array',
+            title: "Work Experience",
+            key: "experience",
+            icon: () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38m0 0A2.18 2.18 0 013 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 013.413-.387m7.5 0V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25v.894m7.5 0a48.667 48.667 0 00-7.5 0M12 12.75h.008v.008H12v-.008z" />
+            </svg>
+            ,
+            data: [
+                {
+                    "employer": {
+                        "type": "text",
+                        "value": "Panmark Ltd.",
+                        "key": "employer",
+                        "title": "Employer"
+                    },
+                    "year_of_experience": {
+                        "type": "text",
+                        "value": "2",
+                        "key": "year_of_experience",
+                        "title": "Year of Experience"
+                    },
+                    "job_title": {
+                        "type": "text",
+                        "value": "Treasurer",
+                        "key": "job_title",
+                        "title": "Job Title"
+                    },
+                    "start_date": {
+                        "type": "month",
+                        "value": "Aug 2021",
+                        "key": "start_date",
+                        "title": "Start Date"
+                    },
+                    "end_date": {
+                        "type": "month",
+                        "value": "Jan 2022",
+                        "key": "end_date",
+                        "title": "End Date"
+                    },
+                    "experience_details": {
+                        "type": "details_point",
+                        "value": [
+                            "Responsible for Financial Oversight and Budgeting"
+                        ],
+                        "key": "experience_details",
+                        "title": "Experience Details"
+                    }
+                },
+                {
+                    "employer": {
+                        "type": "text",
+                        "value": "Khan Enterprise",
+                        "key": "employer",
+                        "title": "Employer"
+                    },
+                    "job_title": {
+                        "type": "text",
+                        "value": "Treasurer",
+                        "key": "job_title",
+                        "title": "Job Title"
+                    },
+                    "start_date": {
+                        "type": "month",
+                        "value": "Feb 2019",
+                        "key": "start_date",
+                        "title": "Start Date"
+                    },
+                    "end_date": {
+                        "type": "month",
+                        "value": "Apr 2019",
+                        "key": "end_date",
+                        "title": "End Date"
+                    },
+                    "experience_details": {
+                        "type": "details_point",
+                        "value": [
+                            "Responsible for Financial Oversight and Budgeting"
+                        ],
+                        "key": "experience_details",
+                        "title": "Experience Details"
+                    }
+                }
+
+            ],
+        },
+        "education": {
+            type: 'array',
+            title: "Education",
+            key: "education",
+            icon: () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5" />
+            </svg>
+
+            ,
+            data: [
+
+                {
+                    "institution_name": {
+                        type: "text",
+                        value: "Chittagong Cantonment English School & College",
+                        key: "institution_name",
+                        title: "Institution Name"
+                    },
+                    "degree": {
+                        "type": "text",
+                        "value": "Secondary School Certificate (SSC)",
+                        "key": "degree",
+                        "title": "Degree"
+                    },
+                    "major": {
+                        "type": "text",
+                        "value": null,
+                        "key": "major",
+                        "title": "Major"
+                    },
+                    "cgpa": {
+                        "type": "number",
+                        "value": 5,
+                        "key": "cgpa",
+                        "title": "CGPA"
+                    },
+                    "start_date": {
+                        type: "month",
+                        value: "",
+                        key: "start_date",
+                        title: "Start Date",
+                    },
+                    "end_date": {
+                        type: "month",
+                        value: "",
+                        key: "end_date",
+                        title: "End Date",
+                    },
+                    "education_details": {
+                        type: "details_point",
+                        value: [
+                            "Valuation and analysis of companies from Food & Allied and Pharmaceutical Industry"
+                        ],
+                        key: "education_details_details",
+                        title: "Education Details"
+                    }
+                }
+
+            ],
+        },
+        "extra_curricular_activity_and_achievements": {
+            type: 'array',
+            title: "Extracurricular & Achivements",
+            key: "extra_curricular_activity_and_achievements",
+            icon: () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 01-.982-3.172M9.497 14.25a7.454 7.454 0 00.981-3.172M5.25 4.236c-.982.143-1.954.317-2.916.52A6.003 6.003 0 007.73 9.728M5.25 4.236V4.5c0 2.108.966 3.99 2.48 5.228M5.25 4.236V2.721C7.456 2.41 9.71 2.25 12 2.25c2.291 0 4.545.16 6.75.47v1.516M7.73 9.728a6.726 6.726 0 002.748 1.35m8.272-6.842V4.5c0 2.108-.966 3.99-2.48 5.228m2.48-5.492a46.32 46.32 0 012.916.52 6.003 6.003 0 01-5.395 4.972m0 0a6.726 6.726 0 01-2.749 1.35m0 0a6.772 6.772 0 01-3.044 0" />
+            </svg>
+
+
+            ,
+            data: [
+
+                {
+                    "name": {
+                        type: "text",
+                        value: "Brand Ambassador, Aarong Dairy",
+                        key: "institution_name",
+                        title: "Institution Name"
+                    },
+                    "type": {
+                        "type": "text",
+                        "value": "Sports",
+                        "key": "type",
+                        "title": "Type"
+                    },
+
+                    "achivements": {
+                        type: "details_point",
+                        value: [
+                            "brand work"
+                        ],
+                        key: "achivements",
+                        title: "Achivements"
+                    }
+                }
+
+            ],
+        },
+        "certifications": {
+            type: 'array',
+            title: "Certifications",
+            key: "certifications",
+            icon: () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+            </svg>
+
+
+            ,
+            data: [
+
+                {
+                    "title": {
+                        "type": "text",
+                        "value": "CFA Institute Investment Foundations",
+                        "key": "title",
+                        "title": "Title"
+                    },
+                    "provider": {
+                        "type": "text",
+                        "value": "CFA Institute",
+                        "key": "provider",
+                        "title": "Provider"
+                    },
+                    "acquired_date": {
+                        "type": "date",
+                        "value": "2020",
+                        "key": "acquired_date",
+                        "title": "Acquired Date"
+                    },
+                    "expiry_date": {
+                        "type": "date",
+                        "value": null,
+                        "key": "expiry_date",
+                        "title": "Expiry Date"
+                    },
+                    "score": {
+                        "type": "number",
+                        "value": null,
+                        "key": "score",
+                        "title": "Score"
+                    }
+                }
+
+            ],
+        },
+        "reference": {
+            type: 'array',
+            title: "References",
+            key: "reference",
+            icon: () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+            </svg>
+
+
+
+            ,
+            data: [
+
+                {
+
+                    "name": {
+                        "type": "text",
+                        "value": "Khorshed Alam Chowdhury",
+                        "key": "name",
+                        "title": "Name"
+                    },
+                    "job_title": {
+                        "type": "text",
+                        "value": "Managing Director",
+                        "key": "job_title",
+                        "title": "Job Title"
+                    },
+                    "institution": {
+                        "type": "text",
+                        "value": "Panmark Impex PTE LTD.",
+                        "key": "institution",
+                        "title": "Institution"
+                    },
+                    "contact": {
+                        type: "label",
+                        value: {
+                            "phone": "6562521148, 6562507122",
+                            "email": "Panmark@pacific.net.sg"
+                        },
+                        key: "contact",
+                        title: "Contact"
+                    }
+                }
+
+            ],
+        },
+        "skills": {
+            type: 'array',
+            title: "Skills",
+            key: "skills",
+            icon: () => <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
+            </svg>
+            ,
+            data: [
+
+                {
+
+                    "hardskills": {
+                        "type": "details_point",
+                        "value": [
+                            "Financial Analysis",
+                            "Capital Budgeting",
+                            "Equity Valuation",
+                            "Data Mining",
+                            "G-suite"
+                        ],
+                        "key": "hardskills",
+                        "title": "Hard Skills"
+                    }
+                },
+                {
+
+                    "softskills": {
+                        "type": "details_point",
+                        "value": [
+                            "Teamwork",
+                            "Coordination",
+                            "Leadership",
+                            "Time"],
+                        "key": "softskills",
+                        "title": "Soft Skills"
+                    }
+                }
+
+            ],
+        }
+
+
+
+
+    })
+    const [sectionPosition, setSectionPositions] = useState(Object.keys(templateData).map((id) => ({ "id": id + "drage", "sectionName": id })))
+
+    const handleOnDragEnd = (result) => {
+
+        if (!result.destination) return;
+        // if ((!result.destination.index || !result.source.index) && (result.destination.index !== 0 && result.source.index !== 0)) return;
+        const items = Array.from(sectionPosition);
+        const [reorderedItem] = items.splice(result.source.index, 1);
+        items.splice(result.destination.index, 0, reorderedItem)
+        setSectionPositions(items);
+    };
+
+
+
+    return (
+        <div className='content-section p-0 h-screen overflow-hidden'>
+
+
+            <DragDropContext onDragEnd={handleOnDragEnd} >
+                <Droppable droppableId="sections">
+                    {(provided) => (
+                        <div className='col-span-5 ' {...provided.droppableProps} ref={provided.innerRef}>
+                            <EditSection templateData={templateData} sectionName={"personalDetails"} setTemplateData={setTemplateData} />
+                            {sectionPosition.map(({ sectionName, id }, indx) => {
+                                if (sectionName === 'personalDetails') return <></>
+                                return (
+                                    <Draggable key={id} draggableId={id} index={indx}>
+                                        {(provided) => (
+                                            <div
+                                                ref={provided.innerRef}
+                                                {...provided.draggableProps}
+                                                {...provided.dragHandleProps}
+                                            >
+                                                <EditSection templateData={templateData} sectionName={sectionName} setTemplateData={setTemplateData} />
+                                            </div>
+                                        )}
+                                    </Draggable>
+                                );
+                            })}
+                            {provided.placeholder}
+                        </div>
+                    )}
+                </Droppable>
+            </DragDropContext>
+
+
+            <div className='col-span-7 overflow-scroll'>
+
+                {templateData && <TemplateTwo sectionPosition={sectionPosition} templateData={templateData} />}
+            </div>
+        </div>
+    );
+};
+
+export default Editorview;
