@@ -1,0 +1,386 @@
+"use client";
+import React, { useEffect, useState } from "react";
+import Image from "next/image";
+import { sign } from "@/utils/jwt";
+
+const isValid = (checkData) => {
+  return checkData && checkData?.length > 0;
+};
+const PersonalDetails = ({ personalDetails }) => {
+  const {
+    name,
+    address,
+    github,
+    linkedin,
+    email,
+    phone,
+    professional_summary,
+  } = personalDetails;
+  return (
+    <>
+      {personalDetails && (
+        <div className="flex flex-col text-center items-center justify-center">
+          <div>
+            <h3 className="text-[#664ea6] uppercase text-xl font-semibold">
+              {name}
+            </h3>
+            {isValid(name) && <p className="font-bold mt-[10px]">{address}</p>}
+          </div>
+          <div className="flex mt-[10px]  mb-[20px] text-sm space-x-3 items-center justify-center">
+            {isValid(phone) && <li className="">{phone}</li>}
+            {isValid(email) && <li className="">{email}</li>}
+            {isValid(github) && <li className="">{github}</li>}
+            {isValid(linkedin) && <li className="">{linkedin}</li>}
+          </div>
+          <div className="flex items-center overflow-hidden w-[650px]">
+            {isValid(professional_summary) && (
+              <p className="break-words overflow-hidden">
+                {professional_summary}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+const Skills = ({ hardSkills, softSkills }) => {
+  return <>{(hardSkills?.length > 0 || softSkills?.length > 0) && (
+    <div>
+      <h3 className="text-[#664ea6] uppercase text-xl mt-[12px] font-semibold border-b-2 border-black">
+        SKILLS
+      </h3>
+
+      <div className="flex flex-col space-y-2 py-2">
+        {hardSkills?.length > 0 && (
+          <div className="flex space-x-1">
+            <p className="font-bold">Hard Skills: </p>
+            {hardSkills.map((skill, index) => {
+              return <span key={index}>{skill},</span>;
+            })}
+          </div>
+        )}
+        {softSkills?.length > 0 && (
+          <div className="flex space-x-1">
+            <p className="font-bold">Soft Skills: </p>
+            {softSkills.map((skill, index) => {
+              return <span key={index}>{skill},</span>;
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )}
+  </>
+}
+const Experience = ({ workExperience }) => {
+  return <>
+    {workExperience && workExperience.length > 0 && (
+      <div>
+        <h3 className="text-[#664ea6] uppercase text-xl mt-[12px] font-semibold border-b-2 border-black">
+          EXPERIENCE
+        </h3>
+        {workExperience.map((singleExp) => {
+          return (
+            <>
+              <div className="flex justify-between mt-[5px] mb-[10px]">
+                <div>
+                  {singleExp.employer && (
+                    <b>{singleExp.employer.value}</b>
+                  )}
+                </div>
+                <div>
+                  {singleExp.start_date && (
+                    <>{singleExp.start_date.value}</>
+                  )}{" "}
+                  {singleExp.start_date.value &&
+                    singleExp.end_date.value && <>{" - "}</>}
+                  {singleExp.end_date ? (
+                    <>{singleExp.end_date.value}</>
+                  ) : (
+                    <>Present</>
+                  )}
+                </div>
+              </div>
+              {singleExp.job_title && (
+                <i>{singleExp.job_title.value}</i>
+              )}
+              <ul className="ml-[45px] list-disc flex flex-col space-y-2">
+                {singleExp.experience_details &&
+                  singleExp.experience_details.value.length > 0 &&
+                  singleExp.experience_details.value.map(
+                    (detailsPoint, detailPointIndex) => {
+                      return (
+                        <li key={detailPointIndex}>{detailsPoint}</li>
+                      );
+                    }
+                  )}
+              </ul>
+            </>
+          );
+        })}
+      </div>
+    )}</>
+}
+const Extracurricular = ({ extracurricular }) => {
+  return <>
+    {extracurricular && extracurricular.length > 0 && <div>
+      <h3 className="text-[#664ea6] uppercase text-xl mt-[12px] font-semibold border-b-2 border-black">
+        EXTRA CURRICULAR ACTIVITIES
+      </h3>
+
+      {extracurricular.map((singleCur) => {
+        return <>
+          <div className="flex flex-col space-y-1 py-1">
+            <div>{singleCur.name.value && <h1><b>{singleCur.name.value}</b></h1>}</div>
+            <div>{singleCur.type.value && <p>{singleCur.type.value}</p>}</div>
+            <div>
+              {singleCur.achivements.value && <p>
+                {singleCur.achivements.value.map((points, indx) => {
+                  return <span key={indx}>{points}</span>
+                })}
+              </p>}
+            </div>
+          </div>
+
+
+        </>
+      })}
+
+
+    </div>}
+
+  </>
+}
+const Education = ({ education }) => {
+  return <>
+    {education && education.length > 0 && (
+      <div>
+        <h3 className="text-[#664ea6] uppercase text-xl mt-[12px] font-semibold border-b-2 border-black">
+          EDUCATION
+        </h3>
+        {education.map((singleEdu) => {
+          return (
+            <>
+              <div className="flex space-y-0 py-1 flex-col">
+                <div>
+                  {singleEdu.institution_name.value && (
+                    <b>{singleEdu.institution_name.value}</b>
+                  )}
+                </div>
+                <div>
+                  {singleEdu.start_date.value && (
+                    <>{singleEdu.start_date.value}</>
+                  )}{" "}
+                  {singleEdu.start_date.value &&
+                    singleEdu.end_date.value && <>{" - "}</>}
+                  {singleEdu.end_date ? (
+                    <>{singleEdu.end_date.value}</>
+                  ) : (
+                    <>Present</>
+                  )}
+                </div>
+              </div>
+              <div>
+                {singleEdu.major.value && (
+                  <p>{singleEdu.major.value}</p>
+                )}
+
+              </div>
+              <div className="flex flex-row space-x-1"> {singleEdu.degree.value && (
+                <p>{singleEdu.degree.value},</p>
+
+              )}
+                {singleEdu.cgpa.value && (
+                  <p><span className="font-bold">CGPA</span>{singleEdu.cgpa.value}</p>
+                )}
+              </div>
+
+              <ul className="ml-[45px] list-disc flex flex-col space-y-2">
+                {singleEdu.education_details &&
+                  singleEdu.education_details.value.length > 0 &&
+                  singleEdu.education_details.value.map(
+                    (detailsPoint, detailPointIndex) => {
+                      return (
+                        <li key={detailPointIndex}>{detailsPoint}</li>
+                      );
+                    }
+                  )}
+              </ul>
+            </>
+          );
+        })}
+      </div>
+    )}
+  </>
+}
+const Certifications = ({ certifications }) => {
+  return <>
+    {certifications && certifications.length > 0 &&
+      <div>
+        <h3 className="text-[#664ea6] uppercase text-xl mt-[12px]  font-semibold border-b-2 border-black">
+          CERTIFICATIONS
+        </h3>
+        {certifications.map((singleCert) => {
+          return (
+            <>
+              <div className="flex flex-col space-y-1 justify-between py-1">
+                <div>
+                  {singleCert.title && (
+                    <b>{singleCert.title.value}</b>
+                  )}
+                </div>
+                <div>
+                  {singleCert.provider.value && (<p>Provider:<span className="mx-2">{singleCert.provider.value}</span></p>)}
+                </div>
+                <div>
+                  {singleCert.acquired_date.value && <p>Acquired Date: <span className="mx-2">{singleCert.acquired_date.value}</span></p>}
+                </div>
+
+                <div>
+                  {singleCert.expiry_date.value && (<p>Expiry Date:<span className="mx-2">{singleCert.expiry_date.value}</span></p>)}
+                </div>
+                <div>
+                  {singleCert.score.value && (<p>Score:<span className="mx-2">{singleCert.score.value}</span></p>)}
+                </div>
+              </div>
+            </>
+          );
+        })}
+      </div>
+    }
+  </>
+}
+const References = ({ reference }) => {
+  return <>
+    {reference && reference.length > 0 &&
+      <div>
+        <h3 className="text-[#664ea6] uppercase text-xl mt-[12px]  font-semibold border-b-2 border-black">
+          REFERENCES
+        </h3>
+        {reference.map((singleRef) => {
+          return (
+            <>
+              <div className="flex flex-col space-y-1 justify-between py-1">
+                <div>
+                  {singleRef.name.value && (
+                    <b>{singleRef.name.value}</b>
+                  )}
+                </div>
+                <div>
+                  {singleRef.job_title.value && (
+                    <p>{singleRef.job_title.value}</p>
+                  )}
+                </div>
+                <div>
+                  {singleRef.institution.value.phone && (
+                    <p>{singleRef.institution.value}</p>
+                  )}
+                </div>
+                <div>
+                  {singleRef.contact?.value?.phone && (
+                    <p>{singleRef.contact?.value?.phone}</p>
+                  )}
+                </div>
+                <div>
+                  {singleRef.contact?.value?.email && (
+                    <p>{singleRef.contact?.value?.email}</p>
+                  )}
+                </div>
+
+              </div>
+            </>
+          );
+        })}
+      </div>
+    }
+
+
+  </>
+}
+const TemplateTwo = ({ templateData, sectionPosition }) => {
+  const [tempPersonalDetails, setTempPersonalDetails] = useState(
+    templateData.personalDetails.data || {}
+  );
+  const [skills, setSkills] = useState(templateData.skills.data || {});
+  const [hardSkills, setHardSkills] = useState(
+    skills[0]?.hardskills?.value || []
+  );
+  const [softSkills, setSoftSkills] = useState(
+    skills[1]?.softskills?.value || []
+  );
+
+  const [personalDetails, setPersonalDetails] = useState({
+    name:
+      tempPersonalDetails.firstName.value + tempPersonalDetails.lastName.value,
+    email: tempPersonalDetails.email.value,
+    phone: tempPersonalDetails.phone.value,
+    github: tempPersonalDetails.github.value,
+    linkedin: tempPersonalDetails.linkedin.value,
+    address: tempPersonalDetails.address.value,
+    professional_summary: tempPersonalDetails.professional_summary.value,
+  });
+
+  useEffect(() => {
+    setTempPersonalDetails(templateData.personalDetails.data || {});
+    setHardSkills(templateData?.skills.data[0]?.hardskills?.value || []);
+    setSoftSkills(templateData?.skills.data[1]?.softskills?.value || []);
+  }, [templateData]);
+
+  useEffect(() => {
+    setPersonalDetails({
+      name:
+        tempPersonalDetails.firstName.value +
+        tempPersonalDetails.lastName.value,
+      email: tempPersonalDetails.email.value,
+      phone: tempPersonalDetails.phone.value,
+      github: tempPersonalDetails.github.value,
+      linkedin: tempPersonalDetails.linkedin.value,
+      address: tempPersonalDetails.address.value,
+      professional_summary: tempPersonalDetails.professional_summary.value,
+    });
+  }, [tempPersonalDetails]);
+
+  const workExperience = templateData.experience.data;
+  const certifications = templateData.certifications.data;
+  const extracurricular = templateData.extra_curricular_activity_and_achievements.data
+  const education = templateData.education.data
+  const reference = templateData.reference.data
+  return (
+    <>
+      {templateData && (
+        <div className="border-solid border-x-2 shadow-sm  text-xs w-full">
+          <div className="w-full h-[1030px] py-[64px] px-[32px] flex flex-col ">
+            <PersonalDetails personalDetails={personalDetails} />
+            {sectionPosition && sectionPosition.map(({ id, sectionName }) => {
+
+
+              if (sectionName === "skills") {
+                return <Skills key={sectionName} hardSkills={hardSkills} softSkills={softSkills} />
+              }
+              if (sectionName === "experience") {
+                return <Experience key={sectionName} workExperience={workExperience} />
+              }
+              if (sectionName === 'certifications') {
+                return <Certifications key={sectionName} certifications={certifications} />
+              }
+              if (sectionName === 'extra_curricular_activity_and_achievements') {
+                return <Extracurricular key={sectionName} extracurricular={extracurricular} />
+              }
+              if (sectionName === 'education') {
+                return <Education key={sectionName} education={education} />
+              }
+              if (sectionName === 'reference') {
+                return <References key={sectionName} reference={reference} />
+              }
+            })}
+
+
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+export default TemplateTwo;
