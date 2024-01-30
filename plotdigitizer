@@ -1,0 +1,742 @@
+import {
+  Box,
+  Button,
+  Code,
+  Container,
+  Flex,
+  NumberInput,
+  Paper,
+  SimpleGrid,
+  Text,
+} from "@mantine/core";
+import { modals } from "@mantine/modals";
+import { useHotkeys } from "@mantine/hooks";
+import React, { useState, useEffect, useRef } from "react";
+import ExtractedCsvModal from "./components/ExtractedCsvModal";
+
+const PlotDigitizer = ({ imageFile }) => {
+  const [isMarkerSelected, setIsMarkerSelected] = useState(false);
+  const [drawnPoints, setDrawnPoints] = useState([]);
+  const [isSelectXRange, setisSelectXRange] = useState(false);
+  const [isSelectYRange, setisSelectYRange] = useState(false);
+  const [steps, setSteps] = useState(1);
+  const [isCalibarated, setIsCalibarated] = useState(false);
+  const [instructionMessage, setInstructionMessage] = useState("calibration");
+  const [isLogarithmicSelected, setIsLogarithmicSelected] = useState(false);
+  const [coordinatePixels, setCoordinatePixels] = useState({
+    xmin: -999,
+    ymin: -999,
+    xmax: -999,
+    ymax: -999,
+  });
+  const [coordinatePixelsWithLabels, setCoordinatePixelsWithLabels] = useState({
+    xmin: { x: -999, y: -999 },
+    ymin: { x: -999, y: -999 },
+    xmax: { x: -999, y: -999 },
+    ymax: { x: -999, y: -999 },
+  });
+  const [coordinateValues, setCoordinateValues] = useState({
+    xmin: 0,
+    ymin: 0,
+    xmax: 0,
+    ymax: 0,
+  });
+  const [showZoomedView, setShowZoomedView] = useState(false);
+  const [zoomedViewPosition, setZoomedViewPosition] = useState({
+    x: 0,
+    y: 0,
+    color: "",
+  });
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const file = imageFile;
+    if (file) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
+      const graphImage = new Image();
+
+      graphImage.onload = () => {
+        setDrawnPoints([]);
+        const ratio = graphImage.width / graphImage.height;
+        const w = Math.min(800, graphImage.width);
+        const h = w / ratio;
+
+        canvas.width = w;
+        canvas.height = h;
+        ctx.drawImage(graphImage, 0, 0, w, h);
+      };
+
+      graphImage.src = file;
+    }
+  }, [imageFile]);
+
+  // Reset The Graph
+
+  const resetPlot = () => {
+    // Reset the values
+    setCoordinatePixels({
+      xmin: -999,
+      ymin: -999,
+      xmax: -999,
+      ymax: -999,
+    });
+    setIsLogarithmicSelected(false);
+    setCoordinatePixelsWithLabels({
+      xmin: { x: -999, y: -999 },
+      ymin: { x: -999, y: -999 },
+      xmax: { x: -999, y: -999 },
+      ymax: { x: -999, y: -999 },
+    });
+    setIsMarkerSelected(false);
+    setShowZoomedView(false);
+    setIsCalibarated(false);
+    setDrawnPoints([]);
+    setSteps(1);
+    setisSelectXRange(false);
+    setisSelectYRange(false);
+    setInstructionMessage("calibration");
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const graphImage = new Image();
+    graphImage.onload = () => {
+      const ratio = graphImage.width / graphImage.height;
+
+      const w = Math.min(800, graphImage.width);
+      const h = w / ratio;
+
+      canvas.width = w;
+      canvas.height = h;
+      ctx.drawImage(graphImage, 0, 0, w, h);
+    };
+    graphImage.src = imageFile;
+  };
+
+  const setImageAndMinMaxPoint = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const graphImage = new Image();
+    graphImage.onload = () => {
+      const ratio = graphImage.width / graphImage.height;
+
+      const w = Math.min(800, graphImage.width);
+      const h = w / ratio;
+
+      canvas.width = w;
+      canvas.height = h;
+      ctx.drawImage(graphImage, 0, 0, w, h);
+      for (const label in coordinatePixelsWithLabels) {
+        if (
+          coordinatePixelsWithLabels[label].x !== -999 &&
+          coordinatePixelsWithLabels[label].y !== -999
+        ) {
+          const point = coordinatePixelsWithLabels[label];
+          drawPoint(point, label);
+        }
+      }
+      drawPoints();
+    };
+
+    graphImage.src = imageFile || "/graph.png";
+  };
+
+  const handleCanvasClick = (event) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const pixel = ctx.getImageData(x, y, 1, 1).data;
+    const point = {
+      x: x,
+      y: y,
+      color: `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`,
+    };
+
+    if (isMarkerSelected) {
+      setDrawnPoints((points) => [...points, point]);
+    }
+    startSelectMinMaxPoint(point);
+  };
+
+  const drawPoints = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    drawnPoints.forEach((point) => {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 3, 0, 3 * Math.PI);
+      ctx.fillStyle = "#000";
+      ctx.fill();
+    }); 
+  };
+  const drawPoint = (point, label) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+
+    // Draw the point
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
+    ctx.fillStyle = "#000";
+    ctx.fill();
+
+    // Add the label
+    ctx.font = "12px Arial";
+    ctx.fillStyle = "#000";
+    ctx.fillText(label, point.x + 5, point.y - 5);
+  };
+
+  useEffect(() => {
+    setImageAndMinMaxPoint();
+  }, [drawnPoints]);
+
+  const toggleMarker = () => {
+    setIsMarkerSelected(!isMarkerSelected);
+  };
+
+  const handleCoordinateChange = (value, name) => {
+    setCoordinateValues((prevValues) => ({
+      ...prevValues,
+      [name]: parseFloat(value),
+    }));
+  };
+
+  function startSelectMinMaxPoint(point) {
+    if (isSelectXRange) {
+      if (coordinatePixels.xmin === -999) {
+        setCoordinatePixels((prev) => ({
+          ...prev,
+          xmin: point.x,
+        }));
+        setCoordinatePixelsWithLabels((prev) => ({
+          ...prev,
+          xmin: { x: point.x, y: point.y },
+        }));
+        drawPoint(point, "xmin");
+        setInstructionMessage("xmax");
+      } else if (coordinatePixels.xmax === -999) {
+        setCoordinatePixels((prev) => ({
+          ...prev,
+          xmax: point.x,
+        }));
+        setCoordinatePixelsWithLabels((prev) => ({
+          ...prev,
+          xmax: { x: point.x, y: point.y },
+        }));
+        drawPoint(point, "xmax");
+        setisSelectYRange(true);
+        setisSelectXRange(false);
+        setInstructionMessage("ymin");
+      }
+    }
+    if (isSelectYRange) {
+      if (coordinatePixels.ymin === -999) {
+        setCoordinatePixels((prev) => ({
+          ...prev,
+          ymin: point.y,
+        }));
+        drawPoint(point, "ymin");
+        setCoordinatePixelsWithLabels((prev) => ({
+          ...prev,
+          ymin: { x: point.x, y: point.y },
+        }));
+        setInstructionMessage("ymax");
+      } else if (coordinatePixels.ymax === -999) {
+        setCoordinatePixels((prev) => ({
+          ...prev,
+          ymax: point.y,
+        }));
+        drawPoint(point, "ymax");
+        setisSelectYRange(false);
+        setIsCalibarated(true);
+        setCoordinatePixelsWithLabels((prev) => ({
+          ...prev,
+          ymax: { x: point.x, y: point.y },
+        }));
+        setInstructionMessage("coordinate");
+      }
+    }
+  }
+
+  const selectCalibaration = () => {
+    resetPlot();
+    setisSelectXRange(true);
+    setInstructionMessage("xmin");
+    if (isMarkerSelected && !isSelectYRange) {
+      setIsMarkerSelected(false);
+    }
+  };
+  function calculateData(points, adjustedPointPosition) {
+    const data = normalizePoints(points, adjustedPointPosition);
+    return data;
+  }
+  // Handle Hotkey function
+
+  const removeLastInsertedPoint = () => {
+    if (drawnPoints.length > 0) {
+      const updatedDrawnPoints = [...drawnPoints];
+      updatedDrawnPoints.pop(); // Remove the last point
+      setDrawnPoints(updatedDrawnPoints);
+    }
+  };
+  // Hover pixel view
+
+  // Add an event listener to the canvas to track cursor position
+  useEffect(() => {
+    const canvas = canvasRef.current;
+
+    const handleMouseMove = (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      const ctx = canvas.getContext("2d");
+
+      const pixel = ctx.getImageData(x, y, 1, 1).data;
+      const point = {
+        x: x,
+        y: y,
+        color: `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`,
+      };
+
+      // Update cursor position state
+      setZoomedViewPosition(point);
+
+      // Show the zoomed view when marker is selected
+      if (isMarkerSelected) {
+        setShowZoomedView(true);
+      } else {
+        setShowZoomedView(false);
+      }
+    };
+
+    canvas.addEventListener("mousemove", handleMouseMove);
+
+    return () => {
+      // Remove event listener when component unmounts
+      canvas.removeEventListener("mousemove", handleMouseMove);
+    };
+  }, [isMarkerSelected]);
+
+  // Style the zoomed view div using CSS
+  const zoomedViewStyle = {
+    width: "100px",
+    height: "100px",
+    border: "1px solid black",
+    backgroundColor: zoomedViewPosition.color,
+    zIndex: 9999,
+  };
+  return (
+    <Container size="xl" mt="xl">
+      <Paper p="lg">
+        <Flex gap={20} justify={"space-around"}>
+          <Box>
+            <canvas
+              ref={canvasRef}
+              style={{ cursor: "crosshair" }}
+              id="canvas"
+              width="800"
+              height="600"
+              onClick={handleCanvasClick}
+              onKeyDown={useHotkeys([["ctrl+Z", removeLastInsertedPoint]], [])}
+            ></canvas>
+          </Box>
+          <Box style={{ flexShrink: 0, flexGrow: 0, flexBasis: 300 }}>
+            <Box>
+              {(isSelectXRange || isSelectYRange || isMarkerSelected) &&
+                showZoomedView && <div style={zoomedViewStyle}></div>}
+              {instructionMessage && getInstructionMessage(instructionMessage)}
+              {steps === 1 && (
+                <>
+                  {isCalibarated ? (
+                    <Box>
+                      <SimpleGrid cols={2} mt="lg">
+                        <NumberInput
+                          label="xmin"
+                          value={coordinateValues.xmin}
+                          onChange={(value) =>
+                            handleCoordinateChange(value, "xmin")
+                          }
+                        />
+                        <NumberInput
+                          label="ymin"
+                          value={coordinateValues.ymin}
+                          onChange={(value) =>
+                            handleCoordinateChange(value, "ymin")
+                          }
+                        />
+                        <NumberInput
+                          label="xmax"
+                          value={coordinateValues.xmax}
+                          onChange={(value) =>
+                            handleCoordinateChange(value, "xmax")
+                          }
+                        />
+                        <NumberInput
+                          label="ymax"
+                          value={coordinateValues.ymax}
+                          onChange={(value) =>
+                            handleCoordinateChange(value, "ymax")
+                          }
+                        />
+                      </SimpleGrid>
+                      <SimpleGrid cols={2} mt={"lg"}>
+                        <Button
+                          onClick={() => {
+                            setInstructionMessage("marker");
+                            setSteps(2);
+                            setIsMarkerSelected(true);
+                          }}
+                          disabled={!isCalibarated}
+                        >
+                          Done
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            setIsCalibarated(false);
+                          }}
+                        >
+                          Back
+                        </Button>
+                      </SimpleGrid>
+                    </Box>
+                  ) : (
+                    <Box>
+                      <SimpleGrid cols={2} gap={20} my={"lg"}>
+                        {!isSelectXRange && !isSelectYRange && (
+                          <Button
+                            onClick={() => {
+                              selectCalibaration();
+                            }}
+                          >
+                            Add Calibration
+                          </Button>
+                        )}
+                        <Button onClick={() => resetPlot()}>Reset</Button>
+                      </SimpleGrid>
+                    </Box>
+                  )}
+                </>
+              )}
+
+              {steps === 2 && (
+                <Box>
+                  <SimpleGrid cols={2} mt="lg">
+                    <Button
+                      onClick={toggleMarker}
+                      style={{
+                        backgroundColor: isMarkerSelected ? "green" : "",
+                      }}
+                    >
+                      Marker
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setSteps(1);
+                      }}
+                    >
+                      Back
+                    </Button>
+                    <Button onClick={() => removeLastInsertedPoint()}>
+                      Undo
+                    </Button>
+                    <Button onClick={() => resetPlot()}>Reset</Button>
+                  </SimpleGrid>
+                  <Button
+                    mt="lg"
+                    w={"100%"}
+                    onClick={() => {
+                      setSteps(3);
+                      setIsMarkerSelected(false);
+                      setInstructionMessage("");
+                    }}
+                  >
+                    Calculate
+                  </Button>
+                </Box>
+              )}
+              {steps === 3 && (
+                <Box>
+                  <ExtractedCsvModal
+                    key={isLogarithmicSelected ? "logarithmic" : "linear"}
+                    xyObjectArray={
+                      isLogarithmicSelected
+                        ? normalizeAndConvertLogarithmic(
+                            drawnPoints,
+                            convertObjectToValuePostion(
+                              coordinatePixels,
+                              coordinateValues,
+                            ),
+                          )
+                        : calculateData(
+                            drawnPoints,
+                            convertObjectToValuePostion(
+                              coordinatePixels,
+                              coordinateValues,
+                            ),
+                          )
+                    }
+                  />
+                  <SimpleGrid cols={2} my="lg">
+                    <Button
+                      onClick={() => {
+                        setSteps(2);
+                      }}
+                    >
+                      Back
+                    </Button>
+
+                    <Button onClick={() => resetPlot()}>Reset</Button>
+                  </SimpleGrid>
+                  <Button
+                    mt="sm"
+                    w={"100%"}
+                    onClick={() => setIsLogarithmicSelected((prev) => !prev)}
+                  >
+                    {isLogarithmicSelected
+                      ? "Convert to linear"
+                      : "Convert to logscale"}
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          </Box>
+        </Flex>
+      </Paper>
+    </Container>
+  );
+};
+
+export default PlotDigitizer;
+
+const getInstructionMessage = (key) => {
+  if (key === "calibration") {
+    return (
+      <Text c="black">
+        Select 4 points in this order X range{" "}
+        <Code color="blue.9" c="white">
+          xmin, xmax
+        </Code>
+        and Y range{" "}
+        <Code color="blue.9" c="white">
+          ymin, ymax
+        </Code>{" "}
+        from the image
+      </Text>
+    );
+  }
+  if (
+    key === "xmin" ||
+    key === "ymin" ||
+    key === "xmax" ||
+    key === "ymax" ||
+    key === "marker"
+  ) {
+    return (
+      <Text c="black">
+        Select{" "}
+        <Code color="blue.9" c="white">
+          {key}
+        </Code>{" "}
+        point
+      </Text>
+    );
+  }
+
+  if (key === "coordinate") {
+    return (
+      <Text c="black">
+        Select corresponding value for{" "}
+        <Code color="blue.9" c="white">
+          xmin, ymin
+        </Code>{" "}
+        <Code color="blue.9" c="white">
+          xmax, ymax
+        </Code>
+      </Text>
+    );
+  }
+
+  return null;
+};
+
+function normalizePoints(points, minMax) {
+  const normalizedPoints = [];
+
+  points.forEach((point) => {
+    const normalizedX = normalizeValue(
+      point.x,
+      minMax.xmin.position,
+      minMax.xmax.position,
+      minMax.xmin.value,
+      minMax.xmax.value,
+    );
+    const normalizedY = normalizeValue(
+      point.y,
+      minMax.ymin.position,
+      minMax.ymax.position,
+      minMax.ymin.value,
+      minMax.ymax.value,
+    );
+
+    normalizedPoints.push({ x: normalizedX, y: normalizedY });
+  });
+
+  return normalizedPoints;
+}
+
+function normalizeAndConvertLogarithmic(points, minMax) {
+  const normalizedPoints = [];
+
+  points.forEach((point) => {
+    const normalizedX = normalizeValue(
+      point.x,
+      minMax.xmin.position,
+      minMax.xmax.position,
+      minMax.xmin.value,
+      minMax.xmax.value,
+    );
+    const normalizedY = normalizeValue(
+      point.y,
+      minMax.ymin.position,
+      minMax.ymax.position,
+      minMax.ymin.value,
+      minMax.ymax.value,
+    );
+    if (normalizedY <= 0) {
+      return;
+    }
+
+    normalizedPoints.push(
+      convertToLogarithmic({ x: normalizedX, y: normalizedY }),
+    );
+  });
+
+  return normalizedPoints;
+}
+function convertToLogarithmic(point) {
+  var x = point.x;
+  var y = point.y;
+
+  if (y <= 0) {
+    throw new Error(
+      "Y must be greater than 0 to convert to a logarithmic scale.",
+    );
+  }
+
+  return {
+    x: x,
+    y: parseFloat(Math.log10(y)).toFixed(4), // Convert y to a logarithmic scale
+  };
+}
+
+function normalizeValue(value, minPosition, maxPosition, minValue, maxValue) {
+  const normalizedValue =
+    ((value - minPosition) / (maxPosition - minPosition)) *
+      (maxValue - minValue) +
+    minValue;
+  return parseFloat(normalizedValue).toFixed(4);
+}
+
+const convertObjectToValuePostion = (coordinatePixels, coordinateValues) => {
+  return {
+    xmin: {
+      position: coordinatePixels.xmin,
+      value: coordinateValues.xmin,
+    },
+    ymin: {
+      position: coordinatePixels.ymin,
+      value: coordinateValues.ymin,
+    },
+    xmax: {
+      position: coordinatePixels.xmax,
+      value: coordinateValues.xmax,
+    },
+    ymax: {
+      position: coordinatePixels.ymax,
+      value: coordinateValues.ymax,
+    },
+  };
+};
+
+export function openPlotDigitizer(imageFile) {
+  modals.open({
+    size: "100%",
+    title: "Plot Digitizer",
+    centered: true,
+    children: <PlotDigitizer imageFile={imageFile} />,
+  });
+}
+
+import { Box, Table, Button, Text, ScrollArea } from "@mantine/core";
+import { modals } from "@mantine/modals";
+
+export default function ExtractedCsvModal({ xyObjectArray }) {
+  const handleDownload = () => {
+    let csvContent =
+      "x,y\n" +
+      xyObjectArray.map((point) => `${point.x},${point.y}`).join("\n");
+    const filename = "data.csv";
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  };
+
+  return (
+    <>
+      {xyObjectArray.length > 0 ? (
+        <ScrollArea h={250}>
+          <Box h={250}>
+            <Box>
+              <Button
+                mb="sm"
+                onClick={() => {
+                  handleDownload();
+                }}
+              >
+                Download CSV
+              </Button>
+            </Box>
+            <Table striped highlightOnHover withTableBorder withColumnBorders>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th key={"x_col"}>x</Table.Th>
+                  <Table.Th key={"y_col"}>y</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {xyObjectArray.map((xyobject, rowIndex) => (
+                  <Table.Tr key={rowIndex}>
+                    <Table.Td key={`cellIndex${xyobject.x}${xyobject.y}`}>
+                      {xyobject.x || 0}
+                    </Table.Td>
+                    <Table.Td key={`cellIndex${xyobject.x}${xyobject.y}`}>
+                      {xyobject.y || 0}
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Box>
+        </ScrollArea>
+      ) : (
+        <Text>No data point selected</Text>
+      )}
+    </>
+  );
+}
+
+export function openExtractedCsvModal(xyObjectArray) {
+  modals.open({
+    size: "50%",
+    title: "Table",
+    centered: true,
+    children: <ExtractedCsvModal xyObjectArray={xyObjectArray} />,
+  });
+}
