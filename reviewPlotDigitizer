@@ -1,0 +1,1487 @@
+// Disclaimer: "Code currently complex, but I've got it under control – simplification in progress!"
+import {
+  ActionIcon,
+  Box,
+  Button,
+  Checkbox,
+  ColorPicker,
+  Container,
+  Flex,
+  NumberInput,
+  Paper,
+  SegmentedControl,
+  SimpleGrid,
+  Slider,
+  Text,
+  Tooltip,
+} from "@mantine/core";
+import { modals } from "@mantine/modals";
+import { useHotkeys } from "@mantine/hooks";
+import React, { useState, useEffect, useRef, useReducer } from "react";
+import ExtractedCsvModal from "./components/ExtractedCsvModal";
+import {
+  IconArrowsUpRight,
+  IconEraser,
+  IconPalette,
+  IconPlus,
+  IconRefresh,
+  IconRotateDot,
+  IconWand,
+} from "@tabler/icons-react";
+import { notifications } from "@mantine/notifications";
+
+// This reducer for store update Plot Canvas Data
+
+const initialPlotData = {
+  storedPoints: [],
+  minMaxCoordinatePixelValues: {
+    xmin: -999,
+    ymin: -999,
+    xmax: -999,
+    ymax: -999,
+  },
+  minMaxCoordinateValues: {
+    xmin: 0,
+    ymin: 0,
+    xmax: 0,
+    ymax: 0,
+  },
+  isXaxisLogScaleSelected: false,
+  isYaxisLogScaleSelected: false,
+  currentPoint: { x: 0, y: 0 },
+  currentPixel: { x: 0, y: 0 },
+  storedNormalizedPoints: [],
+  lineColor: "red",
+  pointColor: "black",
+};
+
+function plotDataStoreReducer(state, action) {
+  const { type } = action;
+
+  switch (type) {
+    case "update":
+      return {
+        ...state,
+        storedPoints: action.data ? action.data : state.storedPoints,
+      };
+    case "add-single-point":
+      return {
+        ...state,
+        storedPoints: [...state.storedPoints, action.data],
+      };
+    case "update-coordinate-pixel-values":
+      return {
+        ...state,
+        minMaxCoordinatePixelValues: {
+          ...state.minMaxCoordinatePixelValues,
+          ...action.data,
+        },
+      };
+    case "update-coordinate-values":
+      // Check is log scale selected and don't update the values
+      if (state.isXaxisLogScaleSelected || state.isYaxisLogScaleSelected) {
+        const axisName = Object.keys(action.data)[0];
+        if (
+          (axisName == "xmin" || axisName == "xmax") &&
+          state.isXaxisLogScaleSelected
+        ) {
+          if (action.data[axisName] <= 0) {
+            notifications.show({
+              message: "Axis values cannot be zero or negative on logscale",
+            });
+            return {
+              ...state,
+              minMaxCoordinateValues: {
+                ...state.minMaxCoordinateValues,
+                ...action.data,
+              },
+              isXaxisLogScaleSelected: false,
+            };
+          }
+        }
+
+        if (
+          (axisName == "ymin" || axisName == "ymax") &&
+          state.isYaxisLogScaleSelected
+        ) {
+          if (action.data[axisName] <= 0) {
+            notifications.show({
+              message: "Axis values cannot be zero or negative on logscale",
+            });
+            return {
+              ...state,
+              minMaxCoordinateValues: {
+                ...state.minMaxCoordinateValues,
+                ...action.data,
+              },
+              isYaxisLogScaleSelected: false,
+            };
+          }
+        }
+      }
+      return {
+        ...state,
+        minMaxCoordinateValues: {
+          ...state.minMaxCoordinateValues,
+          ...action.data,
+        },
+      };
+    case "update-normalized-point":
+      return {
+        ...state,
+        storedNormalizedPoints: state.storedPoints
+          .filter((point) => !point.label)
+          .map((point) => {
+            return normalizeSinglePoint(
+              point,
+              convertObjectToValuePostion(
+                state.minMaxCoordinatePixelValues,
+                state.minMaxCoordinateValues,
+              ),
+              state.isXaxisLogScaleSelected,
+              state.isYaxisLogScaleSelected,
+            );
+          }),
+      };
+
+    case "update-current-point":
+      return {
+        ...state,
+        currentPoint: normalizeSinglePoint(
+          action.data,
+          convertObjectToValuePostion(
+            state.minMaxCoordinatePixelValues,
+            state.minMaxCoordinateValues,
+          ),
+          state.isXaxisLogScaleSelected,
+          state.isYaxisLogScaleSelected,
+        ),
+      };
+    case "toggle-x-axis-log-scale":
+      if (
+        !state.isXaxisLogScaleSelected &&
+        (state.minMaxCoordinateValues.xmin <= 0 ||
+          state.minMaxCoordinateValues.xmax <= 0)
+      ) {
+        notifications.show({
+          message: "Axis values cannot be zero or negative on logscale",
+        });
+
+        return state;
+      }
+      return {
+        ...state,
+        isXaxisLogScaleSelected: !state.isXaxisLogScaleSelected,
+      };
+    case "toggle-y-axis-log-scale":
+      if (
+        !state.isYaxisLogScaleSelected &&
+        (state.minMaxCoordinateValues.ymin <= 0 ||
+          state.minMaxCoordinateValues.ymax <= 0)
+      ) {
+        notifications.show({
+          message: "Axis values cannot be zero or negative on logscale",
+        });
+
+        return state;
+      }
+      return {
+        ...state,
+        isYaxisLogScaleSelected: !state.isYaxisLogScaleSelected,
+      };
+    case "update-current-pixel":
+      return { ...state, currentPixel: action.data };
+
+    case "change-point-color":
+      return { ...state, pointColor: action.data };
+    case "change-line-color":
+      return { ...state, lineColor: action.data };
+    case "set-selected-line-value":
+      return { ...state, ...action.data };
+    case "reset":
+      return { ...initialPlotData };
+    default:
+      return state;
+  }
+}
+
+// This reducer for storing lines
+const initialStoredLine = {
+  storedLines: [{ lineNumber: 1, label: `line-1` }],
+  selectedLineNumber: 1,
+};
+
+function storeLinesReducer(state, action) {
+  const { type, data } = action;
+  switch (type) {
+    case "add-line":
+      return {
+        ...state,
+        storedLines: [
+          ...state.storedLines,
+          {
+            lineNumber: state.storedLines.length + 1,
+            ...data,
+            label: `line-${state.storedLines.length + 1}`,
+          },
+        ],
+        selectedLineNumber: state.storedLines.length + 1,
+      };
+    case "update-line": {
+      // Update Selected Line
+      const newUpdatedLines = state.storedLines.map((singleLine) => {
+        if (singleLine.lineNumber === state.selectedLineNumber) {
+          return { ...singleLine, ...data };
+        }
+        return singleLine;
+      });
+      return {
+        ...state,
+        storedLines: newUpdatedLines,
+      };
+    }
+    case "change-line-number":
+      return { ...state, selectedLineNumber: data };
+    case "reset":
+      return { ...initialStoredLine };
+    default:
+      return state;
+  }
+}
+
+const PlotDigitizer = ({ imageFile = "/graph.png" }) => {
+  // Store plotData reducer
+
+  const [plotDataState, plotDataDispatch] = useReducer(
+    plotDataStoreReducer,
+    initialPlotData,
+  );
+  const {
+    storedPoints,
+    minMaxCoordinatePixelValues,
+    minMaxCoordinateValues,
+    isXaxisLogScaleSelected,
+    isYaxisLogScaleSelected,
+    currentPoint,
+    currentPixel,
+    storedNormalizedPoints,
+    pointColor,
+    lineColor,
+  } = plotDataState;
+
+  // Store Line Reducer
+
+  const [storeLineState, storeLineDispatch] = useReducer(
+    storeLinesReducer,
+    initialStoredLine,
+  );
+
+  const { storedLines, selectedLineNumber } = storeLineState;
+
+  // Local flags to handle event TODO: optimization need
+  const [isMarkerSelected, setIsMarkerSelected] = useState(false);
+  const [isSelectXRange, setisSelectXRange] = useState(false);
+  const [isSelectYRange, setisSelectYRange] = useState(false);
+  const [isCalibarated, setIsCalibarated] = useState(false);
+  const [isAutoColorPathSelected, setIsAutoColorPathSelected] = useState(false);
+  const [isEraserSelected, setIsEraserSelected] = useState(false);
+  const [eraserCircleRadious, setEraserCircleRadious] = useState(20);
+  const [eraserCursor, setEraserCursor] = useState({ x: 0, y: 0 });
+  const [showColorOptions, setShowColorOptions] = useState(false);
+  const [dataAxisSegment, setDataAxisSegment] = useState("axis");
+
+  // Canvas and ZoomCanvas References
+  const canvasRef = useRef(null);
+  const zoomedViewCanvasRef = useRef(null);
+
+  // Update state when image file changes
+
+  // Maybe not need because we don't changing the imagefile
+  useEffect(() => {
+    const file = imageFile;
+    if (file) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
+      const graphImage = new Image();
+
+      graphImage.onload = () => {
+        plotDataDispatch({
+          type: "update",
+          data: [],
+        });
+        const ratio = graphImage.width / graphImage.height;
+        const w = Math.min(800, graphImage.width);
+        const h = w / ratio;
+
+        canvas.width = w;
+        canvas.height = h;
+        ctx.drawImage(graphImage, 0, 0, w, h);
+      };
+
+      graphImage.src = file;
+    }
+  }, [imageFile]);
+
+  // Reset The Graph
+
+  const resetPlot = () => {
+    plotDataDispatch({
+      type: "reset",
+    });
+
+    storeLineDispatch({
+      type: "reset",
+    });
+    // Reset the envent  flag values
+    resetOptionFlags();
+
+    setDataAxisSegment("axis");
+    setIsCalibarated(false);
+    setisSelectXRange(false);
+    setisSelectYRange(false);
+    setShowColorOptions(false);
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const graphImage = new Image();
+    graphImage.onload = () => {
+      const ratio = graphImage.width / graphImage.height;
+
+      const w = Math.min(800, graphImage.width);
+      const h = w / ratio;
+
+      canvas.width = w;
+      canvas.height = h;
+      ctx.drawImage(graphImage, 0, 0, w, h);
+    };
+    graphImage.src = imageFile;
+  };
+
+  // reset option flags
+
+  const resetOptionFlags = () => {
+    setIsAutoColorPathSelected(false);
+    setIsMarkerSelected(false);
+    setIsEraserSelected(false);
+  };
+
+  // Set the Image and point not reseting everyting just keeping the point
+  const setImageAndPoints = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const graphImage = new Image();
+    graphImage.onload = () => {
+      const ratio = graphImage.width / graphImage.height;
+
+      const w = Math.min(800, graphImage.width);
+      const h = w / ratio;
+
+      canvas.width = w;
+      canvas.height = h;
+      ctx.drawImage(graphImage, 0, 0, w, h);
+      drawPoints();
+    };
+
+    graphImage.src = imageFile;
+  };
+
+  // Handle the cursor zoom postion in the zoomcanvas ref
+  useEffect(() => {
+    if (!zoomedViewCanvasRef.current) return;
+
+    const zoomedViewCanvas = zoomedViewCanvasRef.current;
+    const zoomedViewCtx = zoomedViewCanvas.getContext("2d");
+
+    if (!zoomedViewCtx) return;
+
+    const canvas = canvasRef.current;
+
+    const zoomFactor = 30; // You can adjust the zoom factor
+
+    const zoomedWidth = canvas.width / zoomFactor;
+    const zoomedHeight = canvas.height / zoomFactor;
+
+    const startX = Math.max(0, currentPixel.x - zoomedWidth / 2);
+    const startY = Math.max(0, currentPixel.y - zoomedHeight / 2);
+
+    zoomedViewCtx.clearRect(
+      0,
+      0,
+      zoomedViewCanvas.width,
+      zoomedViewCanvas.height,
+    );
+    zoomedViewCtx.drawImage(
+      canvas,
+      startX,
+      startY,
+      zoomedWidth,
+      zoomedHeight,
+      0,
+      0,
+      zoomedViewCanvas.width,
+      zoomedViewCanvas.height,
+    );
+
+    // Draw crosshair in the middle
+    zoomedViewCtx.beginPath();
+    zoomedViewCtx.moveTo(zoomedViewCanvas.width / 2, 0);
+    zoomedViewCtx.lineTo(zoomedViewCanvas.width / 2, zoomedViewCanvas.height);
+    zoomedViewCtx.moveTo(0, zoomedViewCanvas.height / 2);
+    zoomedViewCtx.lineTo(zoomedViewCanvas.width, zoomedViewCanvas.height / 2);
+    zoomedViewCtx.strokeStyle = "red"; // Change color as needed
+    zoomedViewCtx.stroke();
+  }, [currentPoint]);
+
+  // Draw a line for X axis and Y axis
+  const drawLine = (startPoint, endPoint, lineWidth = 2) => {
+    if (!startPoint || !endPoint) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+
+    ctx.lineWidth = lineWidth;
+
+    // Draw line
+    ctx.beginPath();
+    ctx.moveTo(startPoint.x, startPoint.y);
+    ctx.lineTo(endPoint.x, endPoint.y);
+    ctx.strokeStyle = lineColor || "red"; // Change color as needed
+    ctx.stroke();
+  };
+
+  // Draw Points in the canvas
+  const drawPoints = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    drawLine(storedPoints[0], storedPoints[1]);
+    drawLine(storedPoints[2], storedPoints[3]);
+    storedPoints.forEach((point) => {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 2, 0, 2 * Math.PI);
+      ctx.fillStyle = pointColor || "#000";
+      ctx.fill();
+
+      // add label
+      if (point.label) {
+        // Add the label
+        ctx.font = "12px Arial";
+        ctx.fillStyle = "#000";
+        ctx.fillText(point.label, point.x + 5, point.y - 5);
+      }
+    });
+  };
+
+  // Handline canvas mouse movement and do other things
+  const handleCanvasMouseMove = (event) => {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    plotDataDispatch({
+      type: "update-current-point",
+      data: { x, y },
+    });
+    plotDataDispatch({
+      type: "update-current-pixel",
+      data: { x, y },
+    });
+    if (isEraserSelected) {
+      setEraserCursor({ x, y });
+
+      const eraserRadius = eraserCircleRadious - eraserCircleRadious / 2;
+
+      // add dispatch
+      plotDataDispatch({
+        type: "update",
+        data: storedPoints.filter((point) => {
+          if (point.label) {
+            return true;
+          }
+          return (
+            Math.sqrt((point.x - x) ** 2 + (point.y - y) ** 2) > eraserRadius
+          );
+        }),
+      });
+      //
+    }
+  };
+
+  // Handle canvas click and update the points according to the flags
+
+  const handleCanvasClick = (event) => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    plotDataDispatch({
+      type: "update-current-point",
+      data: { x, y },
+    });
+    const pixel = ctx.getImageData(x, y, 1, 1).data;
+    const point = {
+      x: x,
+      y: y,
+      color: `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`,
+    };
+
+    if (isMarkerSelected) {
+      plotDataDispatch({
+        type: "update",
+        data: [...storedPoints, point],
+      });
+    }
+    startSelectMinMaxPoint(point);
+
+    if (isAutoColorPathSelected && isCalibarated) {
+      followColorPath(pixel[0], pixel[1], pixel[2]);
+    }
+  };
+
+  // When storedPoints update draw the new points in the canvas
+  useEffect(() => {
+    setImageAndPoints();
+    plotDataDispatch({
+      type: "update-normalized-point",
+    });
+    storeLineDispatch({
+      type: "update-line",
+      data: {
+        storedPoints,
+        storedNormalizedPoints,
+        lineColor,
+        pointColor,
+      },
+    });
+  }, [storedPoints, dataAxisSegment, lineColor, pointColor]);
+
+  // Toggle flags for handaling the toolbar events
+
+  const toggleMarker = () => {
+    resetOptionFlags();
+    setIsMarkerSelected(!isMarkerSelected);
+  };
+
+  const toggleAutoColorPathSelect = () => {
+    resetOptionFlags();
+    setIsAutoColorPathSelected(!isAutoColorPathSelected);
+  };
+
+  const toggleEraseSelect = () => {
+    resetOptionFlags();
+    setIsEraserSelected(!isEraserSelected);
+  };
+
+  // Using isXaxis selected and default value -999 select the X axis and Y axis and set calibarating true TODO: change -999 to -Inf
+  function startSelectMinMaxPoint(point) {
+    let shouldStorePoint = false;
+    let label = "";
+    if (isSelectXRange) {
+      if (minMaxCoordinatePixelValues.xmin === -999) {
+        plotDataDispatch({
+          type: "update-coordinate-pixel-values",
+          data: {
+            xmin: point.x,
+          },
+        });
+
+        shouldStorePoint = true;
+        label = "xmin";
+      } else if (minMaxCoordinatePixelValues.xmax === -999) {
+        plotDataDispatch({
+          type: "update-coordinate-pixel-values",
+          data: {
+            xmax: point.x,
+          },
+        });
+        label = "xmax";
+        setisSelectYRange(true);
+        setisSelectXRange(false);
+        shouldStorePoint = true;
+      }
+    }
+    if (isSelectYRange) {
+      if (minMaxCoordinatePixelValues.ymin === -999) {
+        plotDataDispatch({
+          type: "update-coordinate-pixel-values",
+          data: {
+            ymin: point.y,
+          },
+        });
+        label = "ymin";
+
+        shouldStorePoint = true;
+      } else if (minMaxCoordinatePixelValues.ymax === -999) {
+        plotDataDispatch({
+          type: "update-coordinate-pixel-values",
+          data: {
+            ymax: point.y,
+          },
+        });
+        label = "ymax";
+
+        setisSelectYRange(false);
+        setIsCalibarated(true);
+        setIsMarkerSelected(true);
+
+        shouldStorePoint = true;
+      }
+    }
+
+    // Is min max updated or set
+
+    if (shouldStorePoint) {
+      plotDataDispatch({
+        type: "add-single-point",
+        data: { x: point.x, y: point.y, label },
+      });
+    }
+  }
+
+  //  Reset the plot and first start issetXrangeselected flag true and handle other events to set the min max value
+  const selectCalibaration = () => {
+    setisSelectXRange(true);
+    if (isMarkerSelected && !isSelectYRange) {
+      setIsMarkerSelected(false);
+    }
+  };
+
+  // Remove the last inserted point and also check if we remvoe the min max value or not
+
+  const removeLastInsertedPoint = () => {
+    // If you created a line you can't change min/max point
+    if (storedPoints.length > 4) {
+      const updatedDrawnPoints = [...storedPoints];
+      const removedPoint = updatedDrawnPoints.pop();
+      if (removedPoint.label) {
+        // If we Remove Min Max value we can reselect the value and adjust the isCalibarated flag
+
+        if (removedPoint.label === "xmax") {
+          // xmax is remove so adjust the flags
+          setisSelectXRange(true);
+          setisSelectYRange(false);
+        } else if (removedPoint.label === "ymin") {
+          setisSelectXRange(false);
+          setisSelectYRange(true);
+        } else if (removedPoint.label === "ymax") {
+          setIsCalibarated(false);
+
+          setisSelectYRange(true);
+        }
+
+        if (["xmin", "xmax", "ymin", "ymax"].includes(removedPoint.label)) {
+          // Reset the pixels value to default
+          plotDataDispatch({
+            type: "update-coordinate-pixel-values",
+            data: {
+              ...minMaxCoordinatePixelValues,
+              [removedPoint.label]: -999,
+            },
+          });
+        }
+      }
+
+      plotDataDispatch({
+        type: "update",
+        data: updatedDrawnPoints,
+      });
+    }
+  };
+
+  // Reset the canvas if calibaration false
+  useEffect(() => {
+    // if calibarated false reset the select option flags
+    if (!isCalibarated) {
+      resetOptionFlags();
+    }
+  }, [isCalibarated]);
+
+  // Function to follow the same color path and add red dots along the graph
+  function followColorPath(targetR, targetG, targetB) {
+    // Set a threshold for color matching (adjust as needed)
+    var colorThreshold = 10;
+    let pathArray = [];
+    const fillColor = pointColor || "black"; // Assuming you have a function to generate a random color
+
+    // Get the canvas context
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+
+    // Loop through the canvas pixels to find the same color path
+    for (var i = 0; i < canvas.width; i++) {
+      // If click on outlide it will stop the loop
+      if (pathArray.length > 1000) {
+        pathArray = [];
+        break;
+      }
+
+      for (var j = 0; j < canvas.height; j++) {
+        var currentPixel = ctx.getImageData(i, j, 1, 1).data;
+
+        // Check if the current pixel color is close to the target color
+        if (
+          Math.abs(currentPixel[0] - targetR) < colorThreshold &&
+          Math.abs(currentPixel[1] - targetG) < colorThreshold &&
+          Math.abs(currentPixel[2] - targetB) < colorThreshold
+        ) {
+          // Check if the point is within the specified boundary
+
+          // Add  dot at the found position
+          ctx.fillStyle = fillColor;
+          ctx.arc(i, j, 2, 0, 2 * Math.PI);
+          ctx.fillRect(i, j, 4, 4); // Adjust the size of the red dot as needed
+          pathArray.push({ x: i, y: j });
+        }
+        if (pathArray.length > 1000) {
+          pathArray = [];
+          break;
+        }
+      }
+    }
+
+    plotDataDispatch({
+      type: "update",
+      data: [...storedPoints, ...pathArray],
+    });
+  }
+
+  return (
+    <Container size="xl" mt="xl">
+      <Paper p="lg">
+        <Box w={300} mx={"auto"}>
+          {/* Option Menue */}
+          <SimpleGrid cols={8}>
+            {/* Marker select after calibarated */}
+
+            <Tooltip label={"Select points"}>
+              <ActionIcon
+                size="lg"
+                variant="delineate-ui-primary"
+                radius={6}
+                mr={3}
+                bg={isMarkerSelected ? "red" : ""}
+                disabled={!isCalibarated}
+                onClick={toggleMarker}
+              >
+                <IconPlus />
+              </ActionIcon>
+            </Tooltip>
+
+            {/* Marker select after calibarated */}
+
+            <Tooltip label={"Select color path"}>
+              <ActionIcon
+                size="lg"
+                variant="delineate-ui-primary"
+                radius={6}
+                mr={3}
+                bg={isAutoColorPathSelected ? "red" : ""}
+                disabled={!isCalibarated}
+                onClick={toggleAutoColorPathSelect}
+              >
+                <IconWand />
+              </ActionIcon>
+            </Tooltip>
+
+            {/* Remove the last point  */}
+
+            <Tooltip label={"Remove last selected point"}>
+              <ActionIcon
+                size="lg"
+                variant="delineate-ui-primary"
+                radius={6}
+                mr={3}
+                disabled={!storedPoints.length}
+                onClick={removeLastInsertedPoint}
+              >
+                <IconRotateDot />
+              </ActionIcon>
+            </Tooltip>
+
+            {/* Eraser*/}
+
+            <Tooltip label={"Erase"}>
+              <ActionIcon
+                size="lg"
+                variant="delineate-ui-primary"
+                radius={6}
+                mr={3}
+                bg={isEraserSelected ? "red" : ""}
+                disabled={!isCalibarated}
+                onClick={toggleEraseSelect}
+              >
+                <IconEraser />
+              </ActionIcon>
+            </Tooltip>
+
+            {/* Reset the canvas*/}
+
+            <Tooltip label={"Reset"}>
+              <ActionIcon
+                size="lg"
+                variant="delineate-ui-primary"
+                radius={6}
+                mr={3}
+                onClick={() => resetPlot()}
+              >
+                <IconRefresh />
+              </ActionIcon>
+            </Tooltip>
+          </SimpleGrid>
+          {/* Sub option */}
+          <Box my={"lg"}>
+            {isEraserSelected && (
+              <Slider
+                color="blue"
+                marks={[{ value: 20 }, { value: 50 }, { value: 80 }]}
+                value={eraserCircleRadious}
+                onChange={setEraserCircleRadious}
+              />
+            )}
+          </Box>
+        </Box>
+        <Flex gap={20} mih={"60vh"} justify={"space-around"}>
+          <Box
+            style={{
+              position: "relative",
+              border: "2px solid #4C4E6438",
+              background: "#FAFAFA",
+            }}
+          >
+            {/* Eraser div  */}
+            {isEraserSelected && (
+              <div
+                style={{
+                  width: `${eraserCircleRadious}px`,
+                  height: `${eraserCircleRadious}px`,
+                  borderRadius: "50%",
+                  backgroundColor: "rgba(255, 0, 0, 0.5)",
+                  position: "absolute",
+                  transform: "translate(-50%, -50%)",
+                  top: `${eraserCursor.y}px`,
+                  left: `${eraserCursor.x}px`,
+                  pointerEvents: "none",
+                  zIndex: 1000,
+                }}
+              ></div>
+            )}
+            <canvas
+              ref={canvasRef}
+              style={{ cursor: isEraserSelected ? "none" : "crosshair" }}
+              id="canvas"
+              width="800"
+              height="600"
+              onClick={handleCanvasClick}
+              onMouseMove={handleCanvasMouseMove}
+              onKeyDown={useHotkeys([["ctrl+Z", removeLastInsertedPoint]], [])}
+            ></canvas>
+          </Box>
+          <Box style={{ flexShrink: 0, flexGrow: 0, flexBasis: 300 }}>
+            <Box my={"md"}>
+              <canvas
+                ref={zoomedViewCanvasRef}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  border: "2px solid #4C4E6438",
+                  background: "#FAFAFA",
+                }}
+              ></canvas>
+            </Box>
+
+            {/* Sniper View */}
+            <SegmentedControl
+              value={dataAxisSegment}
+              onChange={setDataAxisSegment}
+              data={[
+                { label: "Data", value: "data" },
+                { label: "Axis Value", value: "axis" },
+              ]}
+            />
+            {/* Data Table */}
+            <Box>
+              {dataAxisSegment === "axis" ? (
+                <Box>
+                  <SimpleGrid cols={8} my="sm">
+                    {/* Calibaration Button */}
+
+                    <Tooltip label={"Set min/max points"}>
+                      <ActionIcon
+                        size="lg"
+                        variant="delineate-ui-primary"
+                        radius={6}
+                        mr={3}
+                        disabled={isCalibarated}
+                        bg={isSelectXRange || isSelectYRange ? "red" : ""}
+                        onClick={selectCalibaration}
+                      >
+                        <IconArrowsUpRight />
+                      </ActionIcon>
+                    </Tooltip>
+                    <Tooltip label={"Color opiton"}>
+                      <ActionIcon
+                        size="lg"
+                        variant="delineate-ui-primary"
+                        radius={6}
+                        mr={3}
+                        bg={showColorOptions ? "red" : ""}
+                        onClick={() => setShowColorOptions((prev) => !prev)}
+                      >
+                        <IconPalette />
+                      </ActionIcon>
+                    </Tooltip>
+                  </SimpleGrid>
+
+                  {showColorOptions ? (
+                    <SimpleGrid gap={5}>
+                      <Box>
+                        <Text fw={"bold"}>Line Color</Text>
+                        <ColorPicker
+                          format="hex"
+                          withPicker={false}
+                          value={lineColor}
+                          fullWidth
+                          swatches={[
+                            "#2e2e2e",
+                            "#868e96",
+                            "#fa5252",
+                            "#e64980",
+                            "#be4bdb",
+                            "#7950f2",
+                            "#12b886",
+                            "#40c057",
+                            "#82c91e",
+                            "#fab005",
+                            "#fd7e14",
+                          ]}
+                          onChange={(color) =>
+                            plotDataDispatch({
+                              type: "change-line-color",
+                              data: color,
+                            })
+                          }
+                        />
+                      </Box>
+                      <Box>
+                        <Text fw={"bold"}>Point Color</Text>
+                        <ColorPicker
+                          format="hex"
+                          withPicker={false}
+                          value={pointColor}
+                          fullWidth
+                          swatches={[
+                            "#2e2e2e",
+                            "#868e96",
+                            "#fa5252",
+                            "#e64980",
+                            "#be4bdb",
+                            "#7950f2",
+                            "#4c6ef5",
+                            "#228be6",
+                            "#15aabf",
+                            "#fab005",
+                            "#fd7e14",
+                          ]}
+                          onChange={(color) => {
+                            plotDataDispatch({
+                              type: "change-point-color",
+                              data: color,
+                            });
+                          }}
+                        />
+                      </Box>
+                    </SimpleGrid>
+                  ) : (
+                    <>
+                      {isCalibarated ? (
+                        <SimpleGrid cols={1}>
+                          <Flex
+                            display={"flex"}
+                            justify="center"
+                            align={"center"}
+                            gap={10}
+                          >
+                            <NumberInput
+                              label="xmin"
+                              value={minMaxCoordinateValues.xmin}
+                              onChange={(value) =>
+                                plotDataDispatch({
+                                  type: "update-coordinate-values",
+                                  data: {
+                                    xmin: value,
+                                  },
+                                })
+                              }
+                            />
+                            <NumberInput
+                              label="xmax"
+                              value={minMaxCoordinateValues.xmax}
+                              onChange={(value) =>
+                                plotDataDispatch({
+                                  type: "update-coordinate-values",
+                                  data: {
+                                    xmax: value,
+                                  },
+                                })
+                              }
+                            />
+
+                            <Tooltip label="Log scale x">
+                              <Checkbox
+                                checked={isXaxisLogScaleSelected}
+                                onChange={() => {
+                                  plotDataDispatch({
+                                    type: "toggle-x-axis-log-scale",
+                                  });
+                                }}
+                              />
+                            </Tooltip>
+                          </Flex>
+                          <Flex
+                            display={"flex"}
+                            justify="center"
+                            align={"center"}
+                            gap={10}
+                          >
+                            <NumberInput
+                              label="ymin"
+                              value={minMaxCoordinateValues.ymin}
+                              onChange={(value) =>
+                                plotDataDispatch({
+                                  type: "update-coordinate-values",
+                                  data: {
+                                    ymin: value,
+                                  },
+                                })
+                              }
+                            />
+
+                            <NumberInput
+                              label="ymax"
+                              value={minMaxCoordinateValues.ymax}
+                              onChange={(value) =>
+                                plotDataDispatch({
+                                  type: "update-coordinate-values",
+                                  data: {
+                                    ymax: value,
+                                  },
+                                })
+                              }
+                            />
+                            <Tooltip label="Log scale y">
+                              <Checkbox
+                                onChange={() => {
+                                  plotDataDispatch({
+                                    type: "toggle-y-axis-log-scale",
+                                  });
+                                }}
+                                checked={isYaxisLogScaleSelected}
+                              />
+                            </Tooltip>
+                          </Flex>
+                          <Button
+                            disabled={!isCalibarated}
+                            onClick={() => {
+                              setDataAxisSegment("data");
+                            }}
+                          >
+                            Done
+                          </Button>
+                        </SimpleGrid>
+                      ) : (
+                        <Text>
+                          Please select xmin then xmax and ymin then ymax first
+                        </Text>
+                      )}
+                    </>
+                  )}
+                </Box>
+              ) : (
+                <ExtractedCsvModal
+                  storedLines={storedLines}
+                  selectedLineNumber={selectedLineNumber}
+                  selectedLine={storedLines.find(
+                    (singleLine) =>
+                      singleLine.lineNumber === selectedLineNumber,
+                  )}
+                  changeLine={(id) => {
+                    // Change Line Number
+                    storeLineDispatch({
+                      type: "change-line-number",
+                      data: Number(id),
+                    });
+
+                    // Update the plotState with selected state
+                    const selectedPoint = storedLines.find(
+                      (singleLine) => singleLine.lineNumber === Number(id),
+                    );
+                    if (selectedPoint) {
+                      plotDataDispatch({
+                        type: "set-selected-line-value",
+                        data: selectedPoint,
+                      });
+                    }
+                  }}
+                  updateLine={(data) => {
+                    // Update the selected line is now it just a lable name
+                    storeLineDispatch({
+                      type: "update-line",
+                      data: data,
+                    });
+                  }}
+                  addLine={() => {
+                    if (
+                      !isCalibarated ||
+                      storedPoints.lenght <= 0 ||
+                      storedNormalizedPoints.lenght <= 0
+                    ) {
+                      notifications.show({
+                        message: "set min/max value and select some points",
+                      });
+                      return;
+                    }
+
+                    storeLineDispatch({
+                      type: "add-line",
+                      data: {
+                        storedPoints: storedPoints.slice(0, 4),
+                      },
+                    });
+                  }}
+                  key={dataAxisSegment}
+                  point={isCalibarated ? currentPoint : { x: 0, y: 0 }}
+                  xyObjectArray={storedNormalizedPoints || []}
+                />
+              )}
+            </Box>
+          </Box>
+        </Flex>
+      </Paper>
+    </Container>
+  );
+};
+
+export default PlotDigitizer;
+
+// Normalization algorithms
+function normalizeSinglePoint(
+  point,
+  minMax,
+  isXaxisInLogScale = false,
+  isYaxisInLogScale = false,
+) {
+  if (isXaxisInLogScale) {
+    minMax.xmin.value = Math.log10(minMax.xmin.value);
+    minMax.xmax.value = Math.log10(minMax.xmax.value);
+  }
+  if (isYaxisInLogScale) {
+    minMax.ymin.value = Math.log10(minMax.ymin.value);
+    minMax.ymax.value = Math.log10(minMax.ymax.value);
+  }
+  let normalizedX = normalizeValue(
+    point.x,
+    minMax.xmin.position,
+    minMax.xmax.position,
+    minMax.xmin.value,
+    minMax.xmax.value,
+  );
+  let normalizedY = normalizeValue(
+    point.y,
+    minMax.ymin.position,
+    minMax.ymax.position,
+    minMax.ymin.value,
+    minMax.ymax.value,
+  );
+
+  if (isXaxisInLogScale) {
+    normalizedX = Math.pow(10, normalizedX).toFixed(4);
+  }
+
+  if (isYaxisInLogScale) {
+    normalizedY = Math.pow(10, normalizedY).toFixed(4);
+  }
+  return { x: normalizedX, y: normalizedY };
+}
+
+function normalizeValue(value, minPosition, maxPosition, minValue, maxValue) {
+  const normalizedValue =
+    ((value - minPosition) / (maxPosition - minPosition)) *
+      (maxValue - minValue) +
+    minValue;
+  return parseFloat(normalizedValue).toFixed(4);
+}
+
+const convertObjectToValuePostion = (coordinatePixels, coordinateValues) => {
+  return {
+    xmin: {
+      position: coordinatePixels.xmin,
+      value: coordinateValues.xmin,
+    },
+    ymin: {
+      position: coordinatePixels.ymin,
+      value: coordinateValues.ymin,
+    },
+    xmax: {
+      position: coordinatePixels.xmax,
+      value: coordinateValues.xmax,
+    },
+    ymax: {
+      position: coordinatePixels.ymax,
+      value: coordinateValues.ymax,
+    },
+  };
+};
+
+export function openPlotDigitizer(imageFile) {
+  modals.open({
+    size: "100%",
+    title: "Plot Digitizer",
+    centered: true,
+    children: <PlotDigitizer imageFile={imageFile} />,
+  });
+}
+
+
+// Other component
+
+import {
+  Box,
+  Table,
+  Text,
+  ScrollArea,
+  Flex,
+  Code,
+  ActionIcon,
+  NativeSelect,
+  Menu,
+  Input,
+} from "@mantine/core";
+import { modals } from "@mantine/modals";
+import {
+  IconCloudUpload,
+  IconDotsVertical,
+  IconEdit,
+  IconFileDownload,
+  IconLine,
+} from "@tabler/icons-react";
+import { useRouter } from "next/router";
+import { useEffect, useState } from "react";
+
+import { showSuccessNotification } from "~/utils/notifications";
+import { useSavePlotData } from "../api/useSavePlotData";
+import { useQueryClient } from "@tanstack/react-query";
+
+export default function ExtractedCsvModal({
+  xyObjectArray,
+  storedLines,
+  point = { x: 0, y: 0 },
+  addLine,
+  changeLine,
+  updateLine,
+  selectedLine,
+  selectedLineNumber,
+}) {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const projectId = router.query.id;
+  const fileId = router.query.rid;
+  const [selectedLineValue, setSelectedLineValue] =
+    useState(selectedLineNumber);
+  const [isEditSelected, setIsEditSelected] = useState(false);
+  const { mutate: savePlotData } = useSavePlotData({
+    onSuccess() {
+      showSuccessNotification(`CSV file uploaded!`);
+      queryClient.invalidateQueries(["save-plot-data", fileId]);
+    },
+  });
+
+  // Upload the file in the database
+
+  const handleSave = () => {
+    const csvContent =
+      "x,y\n" +
+      xyObjectArray.map((point) => `${point.x},${point.y}`).join("\n");
+
+    // Create a Blob from the CSV content
+    const blob = new Blob([csvContent], { type: "text/csv" });
+
+    // Create a File from the Blob
+    const file = new File([blob], `${selectedLine.label}-data.csv`, {
+      type: "text/csv",
+    });
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("projectId", projectId);
+    formData.append("fileId", fileId);
+    if (projectId) {
+      savePlotData(formData);
+    }
+  };
+
+  // Download the file
+  const handleDownload = () => {
+    let csvContent =
+      "x,y\n" +
+      xyObjectArray.map((point) => `${point.x},${point.y}`).join("\n");
+    const filename = `${selectedLine.label}-data.csv`;
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  };
+  useEffect(() => {
+    setSelectedLineValue(selectedLineNumber);
+    changeLine(selectedLineNumber);
+  }, [selectedLineNumber]);
+
+  return (
+    <>
+      {/* Toolbar  */}
+      <Box mb="sm">
+        <Flex gap={5} py="lg" justify={"space-between"} align={"center"}>
+          {/* If edit selected show input or show optoin */}
+          {isEditSelected ? (
+            <Input
+              placeholder={"Enter line name"}
+              onChange={(event) => {
+                // Update the curently selected line
+                updateLine({ label: event.currentTarget.value || "line" });
+              }}
+              w={200}
+              value={selectedLine.label || ""}
+            />
+          ) : (
+            <NativeSelect
+              size="md"
+              w={200}
+              placeholder="Select a line"
+              value={selectedLineValue}
+              onChange={(event) => {
+                changeLine(event.currentTarget.value);
+                setSelectedLineValue(event.currentTarget.value);
+              }}
+              data={storedLines.map((singleLine) => ({
+                label: `${singleLine.label}`,
+                value: `${singleLine.lineNumber}`,
+              }))}
+            />
+          )}
+
+          {/* If edit button not selected show the button */}
+          <ActionIcon
+            c={isEditSelected ? "green" : ""}
+            onClick={() => setIsEditSelected((prev) => !prev)}
+          >
+            <IconEdit />
+          </ActionIcon>
+          {/* Menu option */}
+          <Menu>
+            <Menu.Target>
+              <ActionIcon>
+                <IconDotsVertical size={16} />
+              </ActionIcon>
+            </Menu.Target>
+
+            <Menu.Dropdown>
+              {/* Add a new Line */}
+
+              <Menu.Item leftSection={<IconLine />} onClick={() => addLine()}>
+                New Line
+              </Menu.Item>
+
+              {/* Edit Button
+              <Menu.Item
+                leftSection={<IconEdit />}
+                c={isEditSelected ? "green" : ""}
+                onClick={() => setIsEditSelected((prev) => !prev)}
+              >
+                Edit
+              </Menu.Item> */}
+
+              {/* Download */}
+              <Menu.Item
+                leftSection={<IconFileDownload />}
+                onClick={() => handleDownload()}
+              >
+                Download
+              </Menu.Item>
+
+              {/* Upload */}
+              <Menu.Item
+                leftSection={<IconCloudUpload />}
+                onClick={() => handleSave()}
+              >
+                Save
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        </Flex>
+        <Box>
+          {/* Current Value */}
+          <Flex gap={10} justify={"center"}>
+            <Code color="gray.4" c="black" px="10" py="5">
+              X {point.x}
+            </Code>
+            <Code color="gray.4" c="black" px="10" py="5">
+              Y {point.y}
+            </Code>
+          </Flex>
+        </Box>
+      </Box>
+
+      {/* Show the Selected Points */}
+
+      {xyObjectArray.length > 0 ? (
+        <ScrollArea h={250}>
+          <Box h={250}>
+            <Table striped highlightOnHover withTableBorder withColumnBorders>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th key={"x_col"}>x</Table.Th>
+                  <Table.Th key={"y_col"}>y</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {xyObjectArray.map((xyobject, rowIndex) => (
+                  <Table.Tr key={rowIndex}>
+                    <Table.Td
+                      key={`${rowIndex}cellIndex${xyobject.x}${xyobject.y}`}
+                    >
+                      {xyobject.x || 0}
+                    </Table.Td>
+                    <Table.Td
+                      key={`cellIndex${xyobject.x}${xyobject.y}${rowIndex}`}
+                    >
+                      {xyobject.y || 0}
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Box>
+        </ScrollArea>
+      ) : (
+        <Text>No data point selected</Text>
+      )}
+    </>
+  );
+}
+
+export function openExtractedCsvModal(xyObjectArray) {
+  modals.open({
+    size: "50%",
+    title: "Table",
+    centered: true,
+    children: <ExtractedCsvModal xyObjectArray={xyObjectArray} />,
+  });
+}
+
